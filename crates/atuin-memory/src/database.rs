@@ -84,10 +84,11 @@ impl SqliteMemoryDb {
         let path_str = path.as_os_str().to_str().unwrap();
 
         // Only create directories for file-based databases, not in-memory
-        if !path_str.starts_with("sqlite::") && !path.exists() {
-            if let Some(dir) = path.parent() {
-                fs::create_dir_all(dir)?;
-            }
+        if !path_str.starts_with("sqlite::")
+            && !path.exists()
+            && let Some(dir) = path.parent()
+        {
+            fs::create_dir_all(dir)?;
         }
 
         let opts = SqliteConnectOptions::from_str(path_str)?
@@ -223,10 +224,10 @@ impl SqliteMemoryDb {
 impl MemoryDatabase for SqliteMemoryDb {
     async fn create(&self, memory: &Memory) -> Result<()> {
         // Validate parent exists if specified
-        if let Some(ref parent_id) = memory.parent_memory_id {
-            if !self.exists(parent_id).await? {
-                return Err(eyre::eyre!("Parent memory not found: {}", parent_id));
-            }
+        if let Some(ref parent_id) = memory.parent_memory_id
+            && !self.exists(parent_id).await?
+        {
+            return Err(eyre::eyre!("Parent memory not found: {}", parent_id));
         }
 
         sqlx::query(

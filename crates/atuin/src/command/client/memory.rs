@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clap::Subcommand;
@@ -61,7 +61,7 @@ pub enum Cmd {
         #[arg(long = "link")]
         link: Vec<String>,
 
-        /// Parent memory ID (can also be set via ATUIN_PARENT_MEMORY_ID env var)
+        /// Parent memory ID (can also be set via `ATUIN_PARENT_MEMORY_ID` env var)
         #[arg(long = "parent")]
         parent: Option<String>,
 
@@ -204,14 +204,13 @@ pub enum Cmd {
 
 /// Get the path to the memory database
 fn memory_db_path(settings: &Settings) -> PathBuf {
-    let data_dir = PathBuf::from(&settings.db_path)
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| {
+    let data_dir = PathBuf::from(&settings.db_path).parent().map_or_else(
+        || {
             ProjectDirs::from("com", "atuin", "atuin")
-                .map(|d: ProjectDirs| d.data_dir().to_path_buf())
-                .unwrap_or_else(|| PathBuf::from("."))
-        });
+                .map_or_else(|| PathBuf::from("."), |d| d.data_dir().to_path_buf())
+        },
+        Path::to_path_buf,
+    );
 
     data_dir.join("memory.db")
 }
@@ -261,6 +260,15 @@ fn get_git_info() -> (Option<String>, Option<String>, Option<String>) {
         });
 
     (repo_root_str, branch, commit)
+}
+
+/// Options for the `run` / `replay` subcommand
+#[allow(clippy::struct_excessive_bools)]
+struct RunOptions {
+    dry_run: bool,
+    interactive: bool,
+    keep_going: bool,
+    here: bool,
 }
 
 impl Cmd {
@@ -331,20 +339,18 @@ impl Cmd {
                 keep_going,
                 here,
             } => {
-                self.handle_run(
-                    &memory_db,
-                    db,
-                    id,
-                    *dry_run,
-                    *interactive,
-                    *keep_going,
-                    *here,
-                )
-                .await
+                let opts = RunOptions {
+                    dry_run: *dry_run,
+                    interactive: *interactive,
+                    keep_going: *keep_going,
+                    here: *here,
+                };
+                self.handle_run(&memory_db, db, id, &opts).await
             }
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_create(
         &self,
         memory_db: &SqliteMemoryDb,
@@ -423,12 +429,12 @@ impl Cmd {
             println!("Created memory: {}", memory.id);
             println!("  Description: {}", memory.description);
             if let Some(repo) = repo_root {
-                println!("  Repo: {}", repo);
+                println!("  Repo: {repo}");
             }
             if let Some(parent_id) = &memory.parent_memory_id {
-                println!("  Parent: {}", parent_id);
+                println!("  Parent: {parent_id}");
             }
-            println!("  Commands linked: {}", linked_count);
+            println!("  Commands linked: {linked_count}");
         }
 
         Ok(())
@@ -474,10 +480,10 @@ impl Cmd {
 
             for m in &memories {
                 let count = memory_db.get_linked_command_count(&m.id).await.unwrap_or(0);
-                println!("{} ({} commands)", m.id, count);
+                println!("{} ({count} commands)", m.id);
                 println!("  {}", m.description);
                 if let Some(repo) = &m.repo_root {
-                    println!("  Repo: {}", repo);
+                    println!("  Repo: {repo}");
                 }
                 println!(
                     "  Created: {}",
@@ -522,13 +528,13 @@ impl Cmd {
             println!("{}", serde_json::to_string(&output)?);
         } else {
             if memories.is_empty() {
-                println!("No memories found matching '{}'", query);
+                println!("No memories found matching '{query}'");
                 return Ok(());
             }
 
             for m in &memories {
                 let count = memory_db.get_linked_command_count(&m.id).await.unwrap_or(0);
-                println!("{} ({} commands)", m.id, count);
+                println!("{} ({count} commands)", m.id);
                 println!("  {}", m.description);
                 println!();
             }
@@ -603,18 +609,18 @@ impl Cmd {
                 memory
                     .agent_id
                     .as_ref()
-                    .map(|a| format!(" by {}", a))
+                    .map(|a| format!(" by {a}"))
                     .unwrap_or_default()
             );
 
             if let Some(repo) = &memory.repo_root {
                 let branch = memory.git_branch.as_deref().unwrap_or("unknown");
                 let commit = memory.git_commit.as_deref().unwrap_or("unknown");
-                println!("Repo: {} ({} @ {})", repo, branch, commit);
+                println!("Repo: {repo} ({branch} @ {commit})");
             }
 
             if let Some(parent_id) = &memory.parent_memory_id {
-                println!("Parent: {}", parent_id);
+                println!("Parent: {parent_id}");
             }
 
             println!();
@@ -674,7 +680,7 @@ impl Cmd {
             }
         }
 
-        println!("Linked {} commands to memory {}", linked_count, memory_id);
+        println!("Linked {linked_count} commands to memory {memory_id}");
         Ok(())
     }
 
@@ -686,7 +692,7 @@ impl Cmd {
         }
 
         memory_db.delete(id).await?;
-        println!("Deleted memory: {}", id);
+        println!("Deleted memory: {id}");
         Ok(())
     }
 
@@ -714,14 +720,14 @@ impl Cmd {
             println!("{}", serde_json::to_string(&output)?);
         } else {
             if children.is_empty() {
-                println!("No children found for memory: {}", id);
+                println!("No children found for memory: {id}");
                 return Ok(());
             }
 
-            println!("Children of {}:", id);
+            println!("Children of {id}:");
             for m in &children {
                 let count = memory_db.get_linked_command_count(&m.id).await.unwrap_or(0);
-                println!("  {} ({} commands)", m.id, count);
+                println!("  {} ({count} commands)", m.id);
                 println!("    {}", m.description);
             }
         }
@@ -753,19 +759,16 @@ impl Cmd {
             println!("{}", serde_json::to_string(&output)?);
         } else {
             if ancestors.is_empty() {
-                println!(
-                    "No ancestors found for memory: {} (this is a root memory)",
-                    id
-                );
+                println!("No ancestors found for memory: {id} (this is a root memory)");
                 return Ok(());
             }
 
-            println!("Ancestors of {} (nearest to root):", id);
+            println!("Ancestors of {id} (nearest to root):");
             for (i, m) in ancestors.iter().enumerate() {
                 let indent = "  ".repeat(i + 1);
                 let count = memory_db.get_linked_command_count(&m.id).await.unwrap_or(0);
-                println!("{}{} ({} commands)", indent, m.id, count);
-                println!("{}  {}", indent, m.description);
+                println!("{indent}{} ({count} commands)", m.id);
+                println!("{indent}  {}", m.description);
             }
         }
 
@@ -780,10 +783,10 @@ impl Cmd {
         json: bool,
     ) -> Result<()> {
         // If root specified, verify it exists
-        if let Some(root_id) = root {
-            if !memory_db.exists(root_id).await? {
-                bail!("Memory not found: {}", root_id);
-            }
+        if let Some(root_id) = root
+            && !memory_db.exists(root_id).await?
+        {
+            bail!("Memory not found: {root_id}");
         }
 
         let memories = memory_db.get_tree(root, Some(depth)).await?;
@@ -810,15 +813,6 @@ impl Cmd {
         memories: &[Memory],
     ) -> Result<Vec<MemoryTreeNode>> {
         use std::collections::HashMap;
-
-        // Build a map of parent_id -> children
-        let mut children_map: HashMap<Option<String>, Vec<&Memory>> = HashMap::new();
-        for m in memories {
-            children_map
-                .entry(m.parent_memory_id.clone())
-                .or_default()
-                .push(m);
-        }
 
         // Recursively build tree nodes
         async fn build_node(
@@ -850,6 +844,15 @@ impl Cmd {
             })
         }
 
+        // Build a map of parent_id -> children
+        let mut children_map: HashMap<Option<String>, Vec<&Memory>> = HashMap::new();
+        for m in memories {
+            children_map
+                .entry(m.parent_memory_id.clone())
+                .or_default()
+                .push(m);
+        }
+
         // Find roots and build tree from them
         let roots = children_map.get(&None).cloned().unwrap_or_default();
         let mut result = Vec::new();
@@ -862,15 +865,6 @@ impl Cmd {
 
     async fn print_tree(&self, memory_db: &SqliteMemoryDb, memories: &[Memory]) -> Result<()> {
         use std::collections::HashMap;
-
-        // Build a map of parent_id -> children
-        let mut children_map: HashMap<Option<String>, Vec<&Memory>> = HashMap::new();
-        for m in memories {
-            children_map
-                .entry(m.parent_memory_id.clone())
-                .or_default()
-                .push(m);
-        }
 
         // Print tree recursively
         async fn print_node(
@@ -886,22 +880,22 @@ impl Cmd {
                 .await
                 .unwrap_or(0);
 
-            println!("{}{}{} ({} commands)", prefix, connector, memory.id, count);
+            println!("{prefix}{connector}{} ({count} commands)", memory.id);
 
             // Print description with proper indentation
             let child_prefix = if is_last {
-                format!("{}    ", prefix)
+                format!("{prefix}    ")
             } else {
-                format!("{}│   ", prefix)
+                format!("{prefix}│   ")
             };
             println!("{}    {}", child_prefix.trim_end(), memory.description);
 
             // Print children
             if let Some(children) = children_map.get(&Some(memory.id.clone())) {
                 let child_prefix = if is_last {
-                    format!("{}    ", prefix)
+                    format!("{prefix}    ")
                 } else {
-                    format!("{}│   ", prefix)
+                    format!("{prefix}│   ")
                 };
 
                 for (i, child) in children.iter().enumerate() {
@@ -920,6 +914,15 @@ impl Cmd {
             Ok(())
         }
 
+        // Build a map of parent_id -> children
+        let mut children_map: HashMap<Option<String>, Vec<&Memory>> = HashMap::new();
+        for m in memories {
+            children_map
+                .entry(m.parent_memory_id.clone())
+                .or_default()
+                .push(m);
+        }
+
         // Print from roots
         let roots = children_map.get(&None).cloned().unwrap_or_default();
         for (i, root) in roots.iter().enumerate() {
@@ -935,10 +938,7 @@ impl Cmd {
         memory_db: &SqliteMemoryDb,
         db: &impl Database,
         id: &str,
-        dry_run: bool,
-        interactive: bool,
-        keep_going: bool,
-        here: bool,
+        opts: &RunOptions,
     ) -> Result<()> {
         let memory = memory_db.get(id).await?;
 
@@ -976,24 +976,24 @@ impl Cmd {
         let current_dir = utils::get_current_dir();
 
         for (i, cmd) in commands.iter().enumerate() {
-            let run_dir = if here {
+            let run_dir = if opts.here {
                 current_dir.clone()
             } else {
                 cmd.cwd.clone()
             };
 
             println!("[{}/{}] {}", i + 1, commands.len(), cmd.command);
-            if !here {
-                println!("      cwd: {}", run_dir);
+            if !opts.here {
+                println!("      cwd: {run_dir}");
             }
 
-            if dry_run {
+            if opts.dry_run {
                 println!("      (dry run - skipped)");
                 println!();
                 continue;
             }
 
-            if interactive {
+            if opts.interactive {
                 print!("      Run this command? [Y/n/q] ");
                 std::io::Write::flush(&mut std::io::stdout())?;
 
@@ -1025,20 +1025,19 @@ impl Cmd {
                         println!("      ✓ exit 0");
                     } else {
                         let code = status.code().unwrap_or(-1);
-                        println!("      ✗ exit {}", code);
+                        println!("      ✗ exit {code}");
 
-                        if !keep_going {
+                        if !opts.keep_going {
                             bail!(
-                                "Command failed with exit code {}. Use --keep-going to continue on errors.",
-                                code
+                                "Command failed with exit code {code}. Use --keep-going to continue on errors."
                             );
                         }
                     }
                 }
                 Err(e) => {
-                    println!("      ✗ failed to execute: {}", e);
-                    if !keep_going {
-                        bail!("Failed to execute command: {}", e);
+                    println!("      ✗ failed to execute: {e}");
+                    if !opts.keep_going {
+                        bail!("Failed to execute command: {e}");
                     }
                 }
             }

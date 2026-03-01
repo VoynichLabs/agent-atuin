@@ -74,7 +74,7 @@ pub enum ShellCmd {
 const BATCH_SIZE: usize = 100;
 
 impl Cmd {
-    #[allow(clippy::cognitive_complexity)]
+    #[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
     pub async fn run<DB: Database>(&self, db: &DB) -> Result<()> {
         if !self.json {
             println!("        Atuin         ");
@@ -86,7 +86,7 @@ impl Cmd {
             println!("Importing history...");
         }
 
-        let result = match &self.shell {
+        match &self.shell {
             ShellCmd::Auto => {
                 if cfg!(windows) {
                     return if env::var("PSModulePath").is_ok() {
@@ -203,9 +203,7 @@ impl Cmd {
             ShellCmd::Xonsh => import::<Xonsh, DB>(db, self.json).await,
             ShellCmd::XonshSqlite => import::<XonshSqlite, DB>(db, self.json).await,
             ShellCmd::Powershell => import::<PowerShell, DB>(db, self.json).await,
-        };
-
-        result
+        }
     }
 }
 

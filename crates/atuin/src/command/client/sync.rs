@@ -175,10 +175,7 @@ async fn run(
         };
         println!("{}", serde_json::to_string(&result)?);
     } else {
-        println!(
-            "Sync complete! {} items in history database, force: {}",
-            history_count, force
-        );
+        println!("Sync complete! {history_count} items in history database, force: {force}");
     }
 
     Ok(())

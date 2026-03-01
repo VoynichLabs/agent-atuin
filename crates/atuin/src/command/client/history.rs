@@ -143,7 +143,7 @@ pub enum Cmd {
     InitStore,
 
     /// Tag the current session with an agent ID
-    /// This sets ATUIN_AGENT_ID for subsequent commands in this session
+    /// This sets `ATUIN_AGENT_ID` for subsequent commands in this session
     #[command(subcommand)]
     Session(SessionCmd),
 
@@ -175,7 +175,7 @@ pub enum Cmd {
 #[command(infer_subcommands = true)]
 pub enum SessionCmd {
     /// Tag the current session with an agent ID
-    /// Prints shell commands to set the ATUIN_AGENT_ID environment variable
+    /// Prints shell commands to set the `ATUIN_AGENT_ID` environment variable
     Tag {
         /// The agent identifier to tag this session with
         #[arg(long)]
@@ -266,11 +266,11 @@ pub fn print_json(h: &[History], reverse: bool) {
         }
     }
 
-    if let Err(err) = w.flush() {
-        if err.kind() != io::ErrorKind::BrokenPipe {
-            eprintln!("ERROR: Failed to flush output: {err}");
-            std::process::exit(1);
-        }
+    if let Err(err) = w.flush()
+        && err.kind() != io::ErrorKind::BrokenPipe
+    {
+        eprintln!("ERROR: Failed to flush output: {err}");
+        std::process::exit(1);
     }
 }
 
@@ -809,6 +809,7 @@ impl Cmd {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn run(self, settings: &Settings) -> Result<()> {
         let context = current_context().await?;
 
