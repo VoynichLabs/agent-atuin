@@ -130,6 +130,13 @@ atuin memory create "Fixed authentication bug by updating JWT validation" --link
 # Create with specific command IDs
 atuin memory create "Deployed version 2.0" --link <history-id-1> --link <history-id-2>
 
+# Create as a child of another memory
+atuin memory create "Sub-task: update tests" --parent <parent-memory-id> --link-last 3
+
+# Parent can also be set via environment variable
+export ATUIN_PARENT_MEMORY_ID="<parent-memory-id>"
+atuin memory create "Sub-task: update docs" --link-last 2
+
 # JSON output
 atuin memory create --json "Refactored database layer" --link-last 3
 ```
@@ -192,6 +199,7 @@ atuin memory show <memory-id> --json
   "branch": "main",
   "commit": "abc123",
   "agent_id": "claude-code-1",
+  "parent_memory_id": null,
   "created_at": "2024-01-15T10:30:00Z",
   "linked_commands": ["history-id-1", "history-id-2", "history-id-3"]
 }
@@ -211,6 +219,58 @@ atuin memory link <memory-id> --last 3
 
 ```bash
 atuin memory delete <memory-id>
+```
+
+### Memory Hierarchy
+
+Memories can form parent-child trees, useful for tracking sub-tasks within a larger task.
+
+#### List Children
+
+```bash
+# Show direct children of a memory
+atuin memory children <memory-id> --json
+```
+
+#### Show Ancestors
+
+```bash
+# Trace the parent chain from a memory back to the root
+atuin memory ancestors <memory-id> --json
+```
+
+#### Tree View
+
+```bash
+# Show all memory trees (roots and their descendants)
+atuin memory tree
+
+# Start from a specific root
+atuin memory tree --root <memory-id>
+
+# Limit traversal depth
+atuin memory tree --depth 3
+
+# JSON output (nested structure)
+atuin memory tree --json
+```
+
+### Replay Linked Commands
+
+Re-run the commands linked to a memory:
+
+```bash
+# Preview commands without executing
+atuin memory run <memory-id> --dry-run
+
+# Run with confirmation before each command
+atuin memory run <memory-id> --interactive
+
+# Run all, continuing past failures
+atuin memory run <memory-id> --keep-going
+
+# Run all commands in the current directory (instead of their original cwd)
+atuin memory run <memory-id> --here
 ```
 
 ## Typical Agent Workflow
@@ -243,6 +303,8 @@ atuin memory delete <memory-id>
 |----------|-------------|
 | `ATUIN_AGENT_ID` | Identifies the agent for command tagging |
 | `ATUIN_SESSION` | Session identifier (auto-generated) |
+| `ATUIN_SESSION_MEMORY_ID` | Root memory ID for the current session |
+| `ATUIN_PARENT_MEMORY_ID` | Default parent for new memories (used by `memory create`) |
 | `ATUIN_LOG` | Log level (e.g., `debug`, `info`) |
 
 ## Database Locations
@@ -258,6 +320,8 @@ atuin memory delete <memory-id>
 3. **Create memories** after completing significant tasks to build searchable context
 4. **Use repository filtering** (`--repo`) when working within git repositories
 5. **Link commands explicitly** when the automatic `--link-last` might include irrelevant commands
+6. **Use parent-child relationships** to organize memories hierarchically (e.g., session root → task → sub-task)
+7. **Use `memory run --dry-run`** to preview before replaying commands from a previous session
 
 ## Troubleshooting
 

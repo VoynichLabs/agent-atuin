@@ -1,6 +1,8 @@
-# Atuin
+# agent-atuin
 
-Shell history tool. Replaces your shell's built-in history with a SQLite database, adds context (cwd, exit code, duration, hostname), and optionally syncs across machines with end-to-end encryption.
+Fork of [Atuin](https://github.com/atuinsh/atuin) with AI agent support. Shell history tool that replaces your shell's built-in history with a SQLite database, adds context (cwd, exit code, duration, hostname), and optionally syncs across machines with end-to-end encryption.
+
+This fork adds: agent identification (`ATUIN_AGENT_ID`), structured JSON output (`--json`), and a memory store (`atuin memory`).
 
 ## Workspace crates
 
@@ -17,6 +19,7 @@ atuin-server           HTTP sync server (axum) - lib + standalone binary
 atuin-server-database  Database trait for server
 atuin-server-postgres  Postgres implementation (sqlx)
 atuin-server-sqlite    SQLite implementation (sqlx)
+atuin-memory           Memory store for agents (this fork)
 ```
 
 ## Two sync protocols
@@ -31,7 +34,7 @@ atuin-server-sqlite    SQLite implementation (sqlx)
 
 ## Databases
 
-- **Client**: SQLite everywhere. Separate DBs for history, record store, KV, scripts. All use sqlx + WAL mode.
+- **Client**: SQLite everywhere. Separate DBs for history, record store, KV, scripts, memory. All use sqlx + WAL mode.
 - **Server**: Postgres (primary) or SQLite. Auto-detected from URI prefix.
 - Migrations live alongside each crate. Never modify existing migrations, only add new ones.
 
@@ -50,16 +53,36 @@ atuin-server-sqlite    SQLite implementation (sqlx)
 - IDs: UUIDv7 (time-ordered), newtype wrappers (`HistoryId`, `RecordId`, `HostId`).
 - Serialization: MessagePack for encrypted payloads, JSON for API, TOML for config.
 - Storage traits: `Database` (client), `Store` (record store), `Database` (server) -- all `async_trait`.
-- History builders: `HistoryImported`, `HistoryCaptured`, `HistoryFromDb` with compile-time field validation.
+- History builders: `HistoryImported`, `HistoryCaptured`, `HistoryFromDb` with compile-time field validation. Always include `agent_id` field (use `None` if no agent context).
 - Feature flags: `client`, `sync`, `daemon`, `clipboard`, `check-update`.
 
 ## Testing
 
 - Unit tests inline with `#[cfg(test)]`, async via `#[tokio::test]`.
 - Integration tests in `crates/atuin/tests/` need Postgres (`ATUIN_DB_URI` env var).
-- Use `":memory:"` SQLite for unit tests needing a database.
+- Use `":memory:"` SQLite for unit tests needing a database. Memory crate provides `SqliteMemoryDb::new()`.
+- New `History` structs in tests must include `agent_id: None`.
 - Runner: `cargo nextest`.
 - Benchmarks: `divan` in `atuin-history`.
+
+## Fork additions
+
+### Agent identification
+
+The `ATUIN_AGENT_ID` environment variable tags all commands with the agent's identifier. The `agent_id` field was added to the `History` struct and the `history` table (migration: `20260216000000_add_agent_id.sql`). Filter by agent with `--agent <id>` on `history list`, `history search`, and `memory list`.
+
+### JSON output
+
+All agent-facing commands support `--json` for structured output: `history list`, `history last`, `memory create/list/search/show/children/ancestors/tree`.
+
+### Memory store (`atuin memory`)
+
+Creates searchable memories linked to shell commands. Lives in `crates/atuin-memory/`.
+
+- Schema: `memories` table + `memory_commands` join table + `memories_fts` FTS5 virtual table
+- Database: `~/.local/share/atuin/memory.db`
+- Supports parent-child relationships (`parent_memory_id`), tree visualization, and replay of linked commands
+- Subcommands: `create`, `list`, `search`, `show`, `link`, `delete`, `children`, `ancestors`, `tree`, `run`
 
 ## Build and check
 
